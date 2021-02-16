@@ -78,7 +78,7 @@ fu_ble_device_set_address (FuBleDevice *self, const gchar *address)
  *
  * Gets the adapter of the device.
  *
- * Returns: The adapter of the device.
+ * Returns: The adapter of the device, e.g. `/org/bluez/hci0`
  *
  * Since: 1.5.7
  **/
@@ -93,7 +93,7 @@ fu_ble_device_get_adapter (FuBleDevice *self)
 /**
  * fu_ble_device_set_adapter:
  * @self: A #FuBleDevice
- * @adapter: (nullable): The adapter, e.g. `FIXME:better-example-please`
+ * @adapter: (nullable): The adapter, e.g. `/org/bluez/hci0`
  *
  * Sets the adapter of the device.
  *
