@@ -6389,9 +6389,9 @@ fu_engine_load (FuEngine *self, FuEngineLoadFlags flags, GError **error)
 		FuBackend *backend = g_ptr_array_index (self->backends, i);
 		g_autoptr(GError) error_backend = NULL;
 		if (!fu_backend_setup (backend, &error_backend)) {
-			g_warning ("failed to setup backend %s: %s",
-				   fu_backend_get_name (backend),
-				   error_backend->message);
+			g_debug ("failed to setup backend %s: %s",
+				 fu_backend_get_name (backend),
+				 error_backend->message);
 			continue;
 		}
 	}
