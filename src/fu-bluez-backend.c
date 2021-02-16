@@ -38,8 +38,11 @@ fu_bluez_load_device_properties (GVariant *properties)
 	g_autofree gchar *address = NULL;
 	g_autofree gchar *name = NULL;
 	gboolean connected = FALSE;
-	GHashTable *characteristics = g_hash_table_new_full (g_str_hash, g_str_equal,
-							     g_free, g_free);
+	g_autoptr(GHashTable) characteristics = NULL;
+
+
+	characteristics = g_hash_table_new_full (g_str_hash, g_str_equal,
+						 g_free, g_free);
 
 	g_variant_iter_init (&it, properties);
 	while (g_variant_iter_next (&it, "{&sv}", &prop_name, &prop_val)) {

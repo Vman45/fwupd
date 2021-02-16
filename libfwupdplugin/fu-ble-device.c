@@ -8,9 +8,9 @@
 
 #include "config.h"
 
-#include "fu-device-private.h"
+#include "fu-common.h"
 #include "fu-ble-device.h"
-
+#include "fu-device-private.h"
 
 /**
  * SECTION:fu-ble-device
@@ -46,7 +46,7 @@ const gchar *
 fu_ble_device_get_name (FuBleDevice *self)
 {
 	FuBleDevicePrivate *priv = GET_PRIVATE (self);
-
+	g_return_val_if_fail (FU_IS_BLE_DEVICE (self), NULL);
 	return priv->name;
 }
 
@@ -64,8 +64,37 @@ const gchar *
 fu_ble_device_get_address (FuBleDevice *self)
 {
 	FuBleDevicePrivate *priv = GET_PRIVATE (self);
-
+	g_return_val_if_fail (FU_IS_BLE_DEVICE (self), NULL);
 	return priv->address;
+}
+
+static void
+fu_ble_device_to_string (FuDevice *device, guint idt, GString *str)
+{
+	FuBleDevice *self = FU_BLE_DEVICE (device);
+	FuBleDeviceClass *klass = FU_BLE_DEVICE_GET_CLASS (self);
+	FuBleDevicePrivate *priv = GET_PRIVATE (self);
+
+	if (priv->name != NULL)
+		fu_common_string_append_kv (str, idt, "Name", priv->name);
+	if (priv->address != NULL)
+		fu_common_string_append_kv (str, idt, "Address", priv->address);
+	if (priv->adapter != NULL)
+		fu_common_string_append_kv (str, idt, "Adapter", priv->adapter);
+	if (priv->characteristics != NULL) {
+		GHashTableIter iter;
+		gpointer key, value;
+		g_hash_table_iter_init (&iter, priv->characteristics);
+		while (g_hash_table_iter_next (&iter, &key, &value)) {
+			fu_common_string_append_kv (str, idt + 1,
+						    (const gchar *) key,
+						    (const gchar *) value);
+		}
+	}
+
+	/* subclassed */
+	if (klass->to_string != NULL)
+		klass->to_string (self, idt, str);
 }
 
 static void
@@ -90,8 +119,10 @@ static void
 fu_ble_device_class_init (FuBleDeviceClass *klass)
 {
 	GObjectClass *object_class = G_OBJECT_CLASS (klass);
+	FuDeviceClass *device_class = FU_DEVICE_CLASS (klass);
 
 	object_class->finalize = fu_ble_device_finalize;
+	device_class->to_string = fu_ble_device_to_string;
 }
 
 /**
@@ -113,8 +144,12 @@ fu_ble_device_new (const gchar *name, const gchar *addr, GHashTable *characteris
 	FuBleDevice *self = g_object_new (FU_TYPE_BLE_DEVICE, NULL);
 	FuBleDevicePrivate *priv = GET_PRIVATE (self);
 
+	g_return_val_if_fail (name != NULL, NULL);
+	g_return_val_if_fail (addr != NULL, NULL);
+	g_return_val_if_fail (characteristics != NULL, NULL);
+
 	priv->name = g_strdup (name);
 	priv->address = g_strdup (addr);
-	priv->characteristics = characteristics;
+	priv->characteristics = g_hash_table_ref (characteristics);
 	return FU_BLE_DEVICE (self);
 }
