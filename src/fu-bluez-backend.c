@@ -33,37 +33,26 @@ fu_bluez_load_device_properties (GVariant *properties)
 {
 	const gchar *prop_name;
 	GVariantIter it;
+	g_autoptr(FuBleDevice) dev = fu_ble_device_new ();
 	g_autoptr(GVariant) prop_val = NULL;
-	FuBleDevice *dev = NULL;
-	g_autofree gchar *address = NULL;
-	g_autofree gchar *name = NULL;
-	gboolean connected = FALSE;
-	g_autoptr(GHashTable) characteristics = NULL;
-
-
-	characteristics = g_hash_table_new_full (g_str_hash, g_str_equal,
-						 g_free, g_free);
 
 	g_variant_iter_init (&it, properties);
 	while (g_variant_iter_next (&it, "{&sv}", &prop_name, &prop_val)) {
 		if (g_strcmp0 (prop_name, "Address") == 0) {
-			address = g_strdup (g_variant_get_string(prop_val, NULL));
+			fu_ble_device_set_address (dev, g_variant_get_string (prop_val, NULL));
 			continue;
 		}
 		if (g_strcmp0 (prop_name, "Name") == 0) {
-			name = g_strdup (g_variant_get_string(prop_val, NULL));
+			fu_ble_device_set_name (dev, g_variant_get_string (prop_val, NULL));
 			continue;
 		}
 		if (g_strcmp0 (prop_name, "Connected") == 0) {
-			connected = g_variant_get_boolean(prop_val);
+			if (g_variant_get_boolean (prop_val))
+				fu_device_add_flag (FU_DEVICE (dev), FWUPD_DEVICE_FLAG_CONNECTED);
 			continue;
 		}
 	}
-	dev = fu_ble_device_new (name, address, characteristics);
-	if (connected)
-		fu_device_add_flag (FU_DEVICE (dev), FWUPD_DEVICE_FLAG_CONNECTED);
-
-	return dev;
+	return g_steal_pointer (&dev);
 }
 
 
@@ -114,7 +103,6 @@ fu_bluez_backend_coldplug (FuBackend *backend, GError **error)
 		g_prefix_error (error, "Failed to connect to bluez dbus: ");
 		return FALSE;
 	}
-
 	value = g_dbus_proxy_call_sync (proxy,
 					"GetManagedObjects",
 					NULL,
@@ -137,11 +125,8 @@ fu_bluez_backend_coldplug (FuBackend *backend, GError **error)
 		g_variant_iter_init (&j, obj_info);
 		while (g_variant_iter_next (&j, "{&s@a{sv}}", &if_name, &properties)) {
 			g_autoptr(FuBleDevice) dev = NULL;
-
-			if (g_strcmp0 (if_name, "org.bluez.Device1")) {
+			if (g_strcmp0 (if_name, "org.bluez.Device1") != 0)
 				continue;
-			}
-
 			dev = fu_bluez_load_device_properties (properties);
 			if (dev != NULL) {
 				g_hash_table_insert (self->devices,
@@ -183,11 +168,7 @@ fu_bluez_backend_class_init (FuBluezBackendClass *klass)
 	object_class->finalize = fu_bluez_backend_finalize;
 	klass_backend->setup = fu_bluez_backend_setup;
 	klass_backend->coldplug = fu_bluez_backend_coldplug;
-	/*
-	 * TODO: Needed?
-	 *
-	 * klass_backend->recoldplug = fu_bluez_backend_recoldplug;
-	 */
+	klass_backend->recoldplug = fu_bluez_backend_coldplug;
 }
 
 FuBackend *
@@ -198,7 +179,7 @@ fu_bluez_backend_new (void)
 
 /*
  * Calls the ReadValue method of the characteristic implemented by
- * obj_path.
+ * @obj_path.
  *
  * This creates a new ad hoc connection every time and runs
  * synchronously (ie. it blocks until it gets the result or until the
@@ -207,15 +188,14 @@ fu_bluez_backend_new (void)
  * Returns a GByteArray that must be freed after use, NULL in case of
  * error.
  */
-static GByteArray *
-fu_bluez_characteristic_read_value (const gchar *obj_path)
+GByteArray *
+fu_bluez_characteristic_read_buf (const gchar *obj_path, GError **error)
 {
 	g_autoptr(GDBusProxy) proxy = NULL;
 	g_autoptr(GVariant) val = NULL;
-	GError *error = NULL;
 	g_autoptr(GVariantBuilder) builder = NULL;
 	g_autoptr(GVariantIter) iter = NULL;
-	GByteArray *val_bytes = NULL;
+	g_autoptr(GByteArray) buf = g_byte_array_new ();
 	guint8 byte;
 
 	proxy = g_dbus_proxy_new_for_bus_sync (G_BUS_TYPE_SYSTEM,
@@ -225,9 +205,9 @@ fu_bluez_characteristic_read_value (const gchar *obj_path)
 					       obj_path,
 					       "org.bluez.GattCharacteristic1",
 					       NULL,
-					       &error);
+					       error);
 	if (proxy == NULL) {
-		/* TODO: Error handling and logging */
+		g_prefix_error (error, "Failed to connect GattCharacteristic1: ");
 		return NULL;
 	}
 	g_dbus_proxy_set_default_timeout (proxy, DEFAULT_PROXY_TIMEOUT);
@@ -250,19 +230,16 @@ fu_bluez_characteristic_read_value (const gchar *obj_path)
 				      G_DBUS_CALL_FLAGS_NONE,
 				      -1,
 				      NULL,
-				      &error);
+				      error);
 	if (val == NULL) {
-		/* TODO: Error handling and logging */
+		g_prefix_error (error, "Failed to read GattCharacteristic1: ");
 		return NULL;
 	}
-
-	val_bytes = g_byte_array_new ();
 	g_variant_get(val, "(ay)", &iter);
-	while (g_variant_iter_loop (iter, "y", &byte)) {
-		g_byte_array_append (val_bytes, &byte, 1);
-	}
+	while (g_variant_iter_loop (iter, "y", &byte))
+		g_byte_array_append (buf, &byte, 1);
 
-	return val_bytes;
+	return g_steal_pointer (&buf);
 }
 
 /*
@@ -272,21 +249,19 @@ fu_bluez_characteristic_read_value (const gchar *obj_path)
  * This creates a new ad hoc connection every time and runs
  * synchronously (ie. it blocks until it gets the result or until the
  * request times out).
- *
- * Returns EXIT_SUCCESS if the call ran successfully, EXIT_FAILURE
- * otherwise.
  */
-static int
-fu_bluez_characteristic_write_value (const gchar *obj_path, const guint8 *val, int len)
+static gboolean
+fu_bluez_characteristic_write_value (const gchar *obj_path,
+				     const guint8 *buf,
+				     gsize bufsz,
+				     GError **error)
 {
 	g_autoptr(GDBusProxy) proxy = NULL;
-	g_autoptr(GVariant) val_variant = NULL;
-	g_autoptr(GVariant) opt_variant = NULL;
-	g_autoptr(GVariantBuilder) val_builder = NULL;
 	g_autoptr(GVariantBuilder) opt_builder = NULL;
+	g_autoptr(GVariantBuilder) val_builder = NULL;
+	g_autoptr(GVariant) opt_variant = NULL;
 	g_autoptr(GVariant) ret = NULL;
-	GError *error = NULL;
-	int i;
+	g_autoptr(GVariant) val_variant = NULL;
 
 	proxy = g_dbus_proxy_new_for_bus_sync (G_BUS_TYPE_SYSTEM,
 					       G_DBUS_PROXY_FLAGS_NONE,
@@ -295,19 +270,19 @@ fu_bluez_characteristic_write_value (const gchar *obj_path, const guint8 *val, i
 					       obj_path,
 					       "org.bluez.GattCharacteristic1",
 					       NULL,
-					       &error);
+					       error);
 	if (proxy == NULL) {
-		/* TODO: Error handling and logging */
-		return EXIT_FAILURE;
+		g_prefix_error (error, "Failed to connect GattCharacteristic1: ");
+		return FALSE;
 	}
-	/* Build the value variant */
+
+	/* build the value variant */
 	val_builder = g_variant_builder_new (G_VARIANT_TYPE ("ay"));
-	for (i = 0; i < len; i++) {
-		g_variant_builder_add (val_builder, "y", val[i]);
-	}
+	for (gsize i = 0; i < bufsz; i++)
+		g_variant_builder_add (val_builder, "y", buf[i]);
 	val_variant = g_variant_new ("ay", val_builder);
 
-	/* Build the options variant (offset = 0) */
+	/* build the options variant (offset = 0) */
 	opt_builder = g_variant_builder_new(G_VARIANT_TYPE("a{sv}"));
 	g_variant_builder_add (opt_builder, "{sv}", "offset",
 			       g_variant_new_uint16 (0));
@@ -321,28 +296,30 @@ fu_bluez_characteristic_write_value (const gchar *obj_path, const guint8 *val, i
 				      G_DBUS_CALL_FLAGS_NONE,
 				      -1,
 				      NULL,
-				      &error);
+				      error);
 	if (ret == NULL) {
-		/* TODO: Error handling and logging */
-		return EXIT_FAILURE;
+		g_prefix_error (error, "Failed to write GattCharacteristic1: ");
+		return FALSE;
 	}
 
-	return EXIT_SUCCESS;
+	return TRUE;
 }
 
 gchar *
-fu_bluez_characteristic_read_string (const gchar *obj_path)
+fu_bluez_characteristic_read_string (const gchar *obj_path, GError **error)
 {
-	GByteArray *val_bytes = fu_bluez_characteristic_read_value (obj_path);
+	GByteArray *buf;
 
-	if (val_bytes == NULL)
+	buf = fu_bluez_characteristic_read_buf (obj_path, error);
+	if (buf == NULL)
 		return NULL;
-
-	return (gchar *) g_byte_array_free (val_bytes, FALSE);
+	return (gchar *) g_byte_array_free (buf, FALSE);
 }
 
-int
-fu_bluez_characteristic_write_bytes (const gchar *obj_path, const guint8 *val, int len)
+gboolean
+fu_bluez_characteristic_write_buf (const gchar *obj_path,
+				   GByteArray *buf,
+				   GError **error)
 {
-	return fu_bluez_characteristic_write_value (obj_path, val, len);
+	return fu_bluez_characteristic_write_value (obj_path, buf->data, buf->len, error);
 }

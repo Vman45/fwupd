@@ -51,6 +51,29 @@ fu_ble_device_get_name (FuBleDevice *self)
 }
 
 /**
+ * fu_ble_device_set_name:
+ * @self: A #FuBleDevice
+ * @name: (nullable): The name, e.g. `FIXME:better-example-please`
+ *
+ * Sets the name of the device.
+ *
+ * Since: 1.5.7
+ **/
+void
+fu_ble_device_set_name (FuBleDevice *self, const gchar *name)
+{
+	FuBleDevicePrivate *priv = GET_PRIVATE (self);
+	g_return_if_fail (FU_IS_BLE_DEVICE (self));
+
+	/* not changed */
+	if (g_strcmp0 (priv->name, name) == 0)
+		return;
+
+	g_free (priv->name);
+	priv->name = g_strdup (name);
+}
+
+/**
  * fu_ble_device_get_address:
  * @self: A #FuBleDevice
  *
@@ -66,6 +89,94 @@ fu_ble_device_get_address (FuBleDevice *self)
 	FuBleDevicePrivate *priv = GET_PRIVATE (self);
 	g_return_val_if_fail (FU_IS_BLE_DEVICE (self), NULL);
 	return priv->address;
+}
+
+/**
+ * fu_ble_device_set_address:
+ * @self: A #FuBleDevice
+ * @address: (nullable): The address, e.g. `FIXME:better-example-please`
+ *
+ * Sets the address of the device.
+ *
+ * Since: 1.5.7
+ **/
+void
+fu_ble_device_set_address (FuBleDevice *self, const gchar *address)
+{
+	FuBleDevicePrivate *priv = GET_PRIVATE (self);
+	g_return_if_fail (FU_IS_BLE_DEVICE (self));
+
+	/* not changed */
+	if (g_strcmp0 (priv->address, address) == 0)
+		return;
+
+	g_free (priv->address);
+	priv->address = g_strdup (address);
+}
+
+/**
+ * fu_ble_device_get_adapter:
+ * @self: A #FuBleDevice
+ *
+ * Gets the adapter of the device.
+ *
+ * Returns: The adapter of the device.
+ *
+ * Since: 1.5.7
+ **/
+const gchar *
+fu_ble_device_get_adapter (FuBleDevice *self)
+{
+	FuBleDevicePrivate *priv = GET_PRIVATE (self);
+	g_return_val_if_fail (FU_IS_BLE_DEVICE (self), NULL);
+	return priv->adapter;
+}
+
+/**
+ * fu_ble_device_set_adapter:
+ * @self: A #FuBleDevice
+ * @adapter: (nullable): The adapter, e.g. `FIXME:better-example-please`
+ *
+ * Sets the adapter of the device.
+ *
+ * Since: 1.5.7
+ **/
+void
+fu_ble_device_set_adapter (FuBleDevice *self, const gchar *adapter)
+{
+	FuBleDevicePrivate *priv = GET_PRIVATE (self);
+	g_return_if_fail (FU_IS_BLE_DEVICE (self));
+
+	/* not changed */
+	if (g_strcmp0 (priv->adapter, adapter) == 0)
+		return;
+
+	g_free (priv->adapter);
+	priv->adapter = g_strdup (adapter);
+}
+
+/**
+ * fu_ble_device_add_characteristic:
+ * @self: A #FuBleDevice
+ * @uuid: (nullable): The UUID, e.g. `FIXME:better-example-please`
+ * @uuid: (nullable): The path, e.g. `FIXME:better-example-please`
+ *
+ * Adds a characteristic to the device.
+ *
+ * Since: 1.5.7
+ **/
+void
+fu_ble_device_add_characteristic (FuBleDevice *self,
+				  const gchar *uuid,
+				  const gchar *path)
+{
+	FuBleDevicePrivate *priv = GET_PRIVATE (self);
+	g_return_if_fail (FU_IS_BLE_DEVICE (self));
+	g_return_if_fail (uuid != NULL);
+	g_return_if_fail (path != NULL);
+	g_hash_table_insert (priv->characteristics,
+			     g_strdup (uuid),
+			     g_strdup (path));
 }
 
 static void
@@ -113,6 +224,9 @@ fu_ble_device_finalize (GObject *object)
 static void
 fu_ble_device_init (FuBleDevice *self)
 {
+	FuBleDevicePrivate *priv = GET_PRIVATE (self);
+	priv->characteristics = g_hash_table_new_full (g_str_hash, g_str_equal,
+						       g_free, g_free);
 }
 
 static void
@@ -139,17 +253,8 @@ fu_ble_device_class_init (FuBleDeviceClass *klass)
  * Since: 1.5.7
  **/
 FuBleDevice *
-fu_ble_device_new (const gchar *name, const gchar *addr, GHashTable *characteristics)
+fu_ble_device_new (void)
 {
 	FuBleDevice *self = g_object_new (FU_TYPE_BLE_DEVICE, NULL);
-	FuBleDevicePrivate *priv = GET_PRIVATE (self);
-
-	g_return_val_if_fail (name != NULL, NULL);
-	g_return_val_if_fail (addr != NULL, NULL);
-	g_return_val_if_fail (characteristics != NULL, NULL);
-
-	priv->name = g_strdup (name);
-	priv->address = g_strdup (addr);
-	priv->characteristics = g_hash_table_ref (characteristics);
 	return FU_BLE_DEVICE (self);
 }

@@ -22,8 +22,16 @@ struct _FuBleDeviceClass
 	gpointer	__reserved[28];
 };
 
-FuBleDevice		*fu_ble_device_new		(const gchar	*name,
-							 const gchar	*addr,
-							 GHashTable	*characteristics);
+FuBleDevice		*fu_ble_device_new		(void);
 const gchar		*fu_ble_device_get_name 	(FuBleDevice	*self);
+void			 fu_ble_device_set_name		(FuBleDevice	*self,
+							 const gchar	*name);
 const gchar		*fu_ble_device_get_address 	(FuBleDevice	*self);
+void			 fu_ble_device_set_address	(FuBleDevice	*self,
+							 const gchar	*name);
+const gchar		*fu_ble_device_get_adapter 	(FuBleDevice	*self);
+void			 fu_ble_device_set_adapter	(FuBleDevice	*self,
+							 const gchar	*name);
+void			 fu_ble_device_add_characteristic(FuBleDevice	*self,
+							 const gchar	*uuid,
+							 const gchar	*path);
