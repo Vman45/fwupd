@@ -193,7 +193,6 @@ static void
 fu_ble_device_to_string (FuDevice *device, guint idt, GString *str)
 {
 	FuBleDevice *self = FU_BLE_DEVICE (device);
-	FuBleDeviceClass *klass = FU_BLE_DEVICE_GET_CLASS (self);
 	FuBleDevicePrivate *priv = GET_PRIVATE (self);
 
 	if (priv->name != NULL)
