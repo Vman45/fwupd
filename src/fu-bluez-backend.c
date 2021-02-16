@@ -164,8 +164,9 @@ fu_bluez_backend_finalize (GObject *object)
 {
 	FuBluezBackend *self = FU_BLUEZ_BACKEND (object);
 
+	if (self->connection != NULL)
+		g_object_unref (self->connection);
 	g_hash_table_unref (self->devices);
-	g_object_unref (self->connection);
 	G_OBJECT_CLASS (fu_bluez_backend_parent_class)->finalize (object);
 }
 
