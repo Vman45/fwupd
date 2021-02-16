@@ -5582,6 +5582,8 @@ fu_engine_plugin_recoldplug_cb (FuPlugin *plugin, FuEngine *self)
 		for (guint i = 0; i < self->backends->len; i++) {
 			FuBackend *backend = g_ptr_array_index (self->backends, i);
 			g_autoptr(GError) error_local = NULL;
+			if (!fu_backend_get_enabled (backend))
+				continue;
 			if (!fu_backend_recoldplug (backend, &error_local)) {
 				g_warning ("failed to recoldplug: %s",
 					   error_local->message);
@@ -6430,6 +6432,8 @@ fu_engine_load (FuEngine *self, FuEngineLoadFlags flags, GError **error)
 		for (guint i = 0; i < self->backends->len; i++) {
 			FuBackend *backend = g_ptr_array_index (self->backends, i);
 			g_autoptr(GError) error_backend = NULL;
+			if (!fu_backend_get_enabled (backend))
+				continue;
 			g_signal_connect (backend, "device-added",
 					  G_CALLBACK (fu_engine_backend_device_added_cb),
 					  self);
