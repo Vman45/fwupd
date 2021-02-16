@@ -49,6 +49,7 @@ G_DEFINE_TYPE (FuSynapticsRmiFirmware, fu_synaptics_rmi_firmware, FU_TYPE_FIRMWA
 #define RMI_IMG_FW_OFFSET			0x100
 
 #define RMI_IMG_V10_CNTR_ADDR_OFFSET		0x0c
+#define RMI_IMG_MAX_CONTAINERS			1024
 
 typedef struct __attribute__((packed)) {
 	guint32	 content_checksum;
@@ -188,6 +189,7 @@ fu_synaptics_rmi_firmware_parse_v10 (FuFirmware *firmware, GBytes *fw, GError **
 	guint32 cntrs_len;
 	guint32 offset;
 	guint32 cntr_addr;
+	guint8 product_id[RMI_PRODUCT_ID_LENGTH] = { 0x0 };
 	gsize sz = 0;
 	const guint8 *data = g_bytes_get_data (fw, &sz);
 
@@ -223,6 +225,14 @@ fu_synaptics_rmi_firmware_parse_v10 (FuFirmware *firmware, GBytes *fw, GError **
 		return FALSE;
 	}
 	cntrs_len = GUINT32_FROM_LE(desc.content_length) / 4;
+	if (cntrs_len > RMI_IMG_MAX_CONTAINERS) {
+		g_set_error (error,
+			     FWUPD_ERROR,
+			     FWUPD_ERROR_INVALID_FILE,
+			     "too many containers in file [%u], maximum is %u",
+			     cntrs_len, (guint) RMI_IMG_MAX_CONTAINERS);
+		return FALSE;
+	}
 	g_debug ("offset=0x%x (cntrs_len=%u)", offset, cntrs_len);
 
 	for (guint32 i = 0; i < cntrs_len; i++) {
@@ -260,7 +270,10 @@ fu_synaptics_rmi_firmware_parse_v10 (FuFirmware *firmware, GBytes *fw, GError **
 		}
 		switch (container_id) {
 		case RMI_FIRMWARE_CONTAINER_ID_BL:
-			self->bootloader_version = data[content_addr];
+			if (!fu_common_read_uint8_safe (data, sz, content_addr,
+							&self->bootloader_version,
+							error))
+				return FALSE;
 			break;
 		case RMI_FIRMWARE_CONTAINER_ID_UI:
 		case RMI_FIRMWARE_CONTAINER_ID_CORE_CODE:
@@ -305,7 +318,10 @@ fu_synaptics_rmi_firmware_parse_v10 (FuFirmware *firmware, GBytes *fw, GError **
 							 G_LITTLE_ENDIAN,
 							 error))
 				return FALSE;
-			self->product_id = g_strndup ((const gchar *) data + content_addr + 0x18, RMI_PRODUCT_ID_LENGTH);
+			if (!fu_memcpy_safe (product_id, sizeof(product_id), 0x0,	/* dst */
+					     data, sz, content_addr + 0x18,		/* src */
+					     sizeof(product_id), error))
+				return FALSE;
 			break;
 		default:
 			g_debug ("unsupported container %s [0x%02x]",
@@ -314,6 +330,11 @@ fu_synaptics_rmi_firmware_parse_v10 (FuFirmware *firmware, GBytes *fw, GError **
 			break;
 		}
 		offset += 4;
+	}
+	if (product_id[0] != '\0') {
+		g_free (self->product_id);
+		self->product_id = g_strndup ((const gchar *) product_id,
+					      sizeof(product_id));
 	}
 	return TRUE;
 }
@@ -639,6 +660,7 @@ fu_synaptics_rmi_firmware_write (FuFirmware *firmware, GError **error)
 static void
 fu_synaptics_rmi_firmware_init (FuSynapticsRmiFirmware *self)
 {
+	fu_firmware_add_flag (FU_FIRMWARE (self), FU_FIRMWARE_FLAG_HAS_CHECKSUM);
 }
 
 static void

@@ -1,5 +1,5 @@
 project('fwupd', 'c',
-  version : '1.5.6',
+  version : '1.5.7',
   license : 'LGPL-2.1+',
   meson_version : '>=0.47.0',
   default_options : ['warning_level=2', 'c_std=c99'],
@@ -318,6 +318,9 @@ if cc.has_function('getuid')
 endif
 if cc.has_function('realpath')
   conf.set('HAVE_REALPATH', '1')
+endif
+if cc.has_function('memmem')
+  conf.set('HAVE_MEMMEM', '1')
 endif
 if cc.has_function('sigaction')
   conf.set('HAVE_SIGACTION', '1')

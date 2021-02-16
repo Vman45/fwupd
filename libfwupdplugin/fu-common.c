@@ -1896,13 +1896,14 @@ fu_common_strsafe (const gchar *str, gsize maxsz)
 
 	/* replace non-printable chars with '.' */
 	tmp = g_string_sized_new (maxsz);
-	for (gsize i = 0; str[i] != '\0' && i < maxsz; i++) {
+	for (gsize i = 0; i < maxsz && str[i] != '\0'; i++) {
 		if (!g_ascii_isprint (str[i])) {
 			g_string_append_c (tmp, '.');
 			continue;
 		}
 		g_string_append_c (tmp, str[i]);
-		valid = TRUE;
+		if (!g_ascii_isspace (str[i]))
+			valid = TRUE;
 	}
 
 	/* if just junk, don't return 'all dots' */
@@ -2772,13 +2773,19 @@ fu_common_get_esp_for_path (const gchar *esp_path, GError **error)
 {
 	g_autofree gchar *basename = NULL;
 	g_autoptr(GPtrArray) volumes = NULL;
+	g_autoptr(GError) error_local = NULL;
 
 	g_return_val_if_fail (esp_path != NULL, NULL);
 	g_return_val_if_fail (error == NULL || *error == NULL, NULL);
 
-	volumes = fu_common_get_volumes_by_kind (FU_VOLUME_KIND_ESP, error);
-	if (volumes == NULL)
+	volumes = fu_common_get_volumes_by_kind (FU_VOLUME_KIND_ESP, &error_local);
+	if (volumes == NULL) {
+		/* check if it's a valid directory already */
+		if (g_file_test (esp_path, G_FILE_TEST_IS_DIR))
+			return fu_volume_new_from_mount_path (esp_path);
+		g_propagate_error (error, g_steal_pointer (&error_local));
 		return NULL;
+	}
 	basename = g_path_get_basename (esp_path);
 	for (guint i = 0; i < volumes->len; i++) {
 		FuVolume *vol = g_ptr_array_index (volumes, i);

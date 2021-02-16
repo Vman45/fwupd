@@ -771,5 +771,7 @@ LIBFWUPDPLUGIN_1.5.7 {
     fu_ble_device_set_adapter;
     fu_ble_device_set_address;
     fu_ble_device_write;
+    fu_firmware_get_version_raw;
+    fu_firmware_set_version_raw;
   local: *;
 } LIBFWUPDPLUGIN_1.5.6;

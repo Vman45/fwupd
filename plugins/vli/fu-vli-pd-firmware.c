@@ -119,6 +119,7 @@ fu_vli_pd_firmware_parse (FuFirmware *firmware,
 	}
 	fwver_str = fu_common_version_from_uint32 (fwver, FWUPD_VERSION_FORMAT_QUAD);
 	fu_firmware_set_version (firmware, fwver_str);
+	fu_firmware_set_version_raw (firmware, fwver);
 
 	/* check size */
 	if (bufsz != fu_vli_common_device_kind_get_size (self->device_kind)) {
@@ -159,6 +160,7 @@ fu_vli_pd_firmware_parse (FuFirmware *firmware,
 static void
 fu_vli_pd_firmware_init (FuVliPdFirmware *self)
 {
+	fu_firmware_add_flag (FU_FIRMWARE (self), FU_FIRMWARE_FLAG_HAS_CHECKSUM);
 }
 
 static void
