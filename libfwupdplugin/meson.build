@@ -29,7 +29,7 @@ fwupdplugin_src = [
   'fu-udev-device.c',
   'fu-usb-device.c',
   'fu-hid-device.c',
-  'fu-bluetooth-device.c',
+  'fu-ble-device.c',
 ]
 
 fwupdplugin_headers = [
@@ -65,7 +65,7 @@ fwupdplugin_headers = [
   'fu-udev-device.h',
   'fu-usb-device.h',
   'fu-hid-device.h',
-  'fu-bluetooth-device.h',
+  'fu-ble-device.h',
 ]
 install_headers(
   'fwupdplugin.h',
