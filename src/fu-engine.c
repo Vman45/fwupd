@@ -6387,8 +6387,13 @@ fu_engine_load (FuEngine *self, FuEngineLoadFlags flags, GError **error)
 	/* set up backends */
 	for (guint i = 0; i < self->backends->len; i++) {
 		FuBackend *backend = g_ptr_array_index (self->backends, i);
-		if (!fu_backend_setup (backend, error))
-			return FALSE;
+		g_autoptr(GError) error_backend = NULL;
+		if (!fu_backend_setup (backend, &error_backend)) {
+			g_warning ("failed to setup backend %s: %s",
+				   fu_backend_get_name (backend),
+				   error_backend->message);
+			continue;
+		}
 	}
 
 	/* delete old data files */
@@ -6424,6 +6429,7 @@ fu_engine_load (FuEngine *self, FuEngineLoadFlags flags, GError **error)
 	if (flags & FU_ENGINE_LOAD_FLAG_COLDPLUG) {
 		for (guint i = 0; i < self->backends->len; i++) {
 			FuBackend *backend = g_ptr_array_index (self->backends, i);
+			g_autoptr(GError) error_backend = NULL;
 			g_signal_connect (backend, "device-added",
 					  G_CALLBACK (fu_engine_backend_device_added_cb),
 					  self);
@@ -6433,8 +6439,12 @@ fu_engine_load (FuEngine *self, FuEngineLoadFlags flags, GError **error)
 			g_signal_connect (backend, "device-changed",
 					  G_CALLBACK (fu_engine_backend_device_changed_cb),
 					  self);
-			if (!fu_backend_coldplug (backend, error))
-				return FALSE;
+			if (!fu_backend_coldplug (backend, &error_backend)) {
+				g_warning ("failed to coldplug backend %s: %s",
+					   fu_backend_get_name (backend),
+					   error_backend->message);
+				continue;
+			}
 		}
 	}
 
