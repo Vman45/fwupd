@@ -22,10 +22,9 @@
  */
 
 typedef struct {
-	gchar		*name;
-	gchar		*address;
-	gchar		*adapter;
-	GHashTable	*characteristics;	/* utf8 : utf8 */
+	gchar			*name;
+	gchar			*address;
+	gchar			*adapter;
 } FuBleDevicePrivate;
 
 G_DEFINE_TYPE_WITH_PRIVATE (FuBleDevice, fu_ble_device, FU_TYPE_DEVICE)
@@ -33,53 +32,12 @@ G_DEFINE_TYPE_WITH_PRIVATE (FuBleDevice, fu_ble_device, FU_TYPE_DEVICE)
 #define GET_PRIVATE(o) (fu_ble_device_get_instance_private (o))
 
 /**
- * fu_ble_device_get_name:
- * @self: A #FuBleDevice
- *
- * Gets the name of the device.
- *
- * Returns: The name of the device.
- *
- * Since: 1.5.7
- **/
-const gchar *
-fu_ble_device_get_name (FuBleDevice *self)
-{
-	FuBleDevicePrivate *priv = GET_PRIVATE (self);
-	g_return_val_if_fail (FU_IS_BLE_DEVICE (self), NULL);
-	return priv->name;
-}
-
-/**
- * fu_ble_device_set_name:
- * @self: A #FuBleDevice
- * @name: (nullable): The name, e.g. `FIXME:better-example-please`
- *
- * Sets the name of the device.
- *
- * Since: 1.5.7
- **/
-void
-fu_ble_device_set_name (FuBleDevice *self, const gchar *name)
-{
-	FuBleDevicePrivate *priv = GET_PRIVATE (self);
-	g_return_if_fail (FU_IS_BLE_DEVICE (self));
-
-	/* not changed */
-	if (g_strcmp0 (priv->name, name) == 0)
-		return;
-
-	g_free (priv->name);
-	priv->name = g_strdup (name);
-}
-
-/**
  * fu_ble_device_get_address:
  * @self: A #FuBleDevice
  *
  * Gets the address of the device.
  *
- * Returns: The address of the device.
+ * Returns: The address of the device, e.g. `F2:EC:98:FF:03:C6`
  *
  * Since: 1.5.7
  **/
@@ -94,7 +52,7 @@ fu_ble_device_get_address (FuBleDevice *self)
 /**
  * fu_ble_device_set_address:
  * @self: A #FuBleDevice
- * @address: (nullable): The address, e.g. `FIXME:better-example-please`
+ * @address: (nullable): The address, e.g. `F2:EC:98:FF:03:C6`
  *
  * Sets the address of the device.
  *
@@ -156,27 +114,79 @@ fu_ble_device_set_adapter (FuBleDevice *self, const gchar *adapter)
 }
 
 /**
- * fu_ble_device_add_characteristic:
+ * fu_ble_device_read:
  * @self: A #FuBleDevice
- * @uuid: (nullable): The UUID, e.g. `FIXME:better-example-please`
- * @uuid: (nullable): The path, e.g. `FIXME:better-example-please`
+ * @uuid: The UUID, e.g. `00cde35c-7062-11eb-9439-0242ac130002`
+ * @error: A #GError, or %NULL
  *
- * Adds a characteristic to the device.
+ * Reads from a UUID on the device.
+ *
+ * Returns: (transfer full): data, or %NULL for error
  *
  * Since: 1.5.7
  **/
-void
-fu_ble_device_add_characteristic (FuBleDevice *self,
-				  const gchar *uuid,
-				  const gchar *path)
+GByteArray *
+fu_ble_device_read (FuBleDevice *self, const gchar *uuid, GError **error)
 {
-	FuBleDevicePrivate *priv = GET_PRIVATE (self);
-	g_return_if_fail (FU_IS_BLE_DEVICE (self));
-	g_return_if_fail (uuid != NULL);
-	g_return_if_fail (path != NULL);
-	g_hash_table_insert (priv->characteristics,
-			     g_strdup (uuid),
-			     g_strdup (path));
+	FuBleDeviceClass *klass = FU_BLE_DEVICE_GET_CLASS (self);
+	if (klass->read == NULL) {
+		g_set_error_literal (error,
+				     G_IO_ERROR,
+				     G_IO_ERROR_NOT_SUPPORTED,
+				     "not supported");
+		return NULL;
+	}
+	return klass->read (self, uuid, error);
+}
+
+/**
+ * fu_ble_device_read_string:
+ * @self: A #FuBleDevice
+ * @uuid: The UUID, e.g. `FIXME:better-example-please`
+ * @error: A #GError, or %NULL
+ *
+ * Reads a string from a UUID on the device.
+ *
+ * Returns: (transfer full): data, or %NULL for error
+ *
+ * Since: 1.5.7
+ **/
+gchar *
+fu_ble_device_read_string (FuBleDevice *self, const gchar *uuid, GError **error)
+{
+	GByteArray *buf = fu_ble_device_read (self, uuid, error);
+	if (buf == NULL)
+		return NULL;
+	return (gchar *) g_byte_array_free (buf, FALSE);
+}
+
+/**
+ * fu_ble_device_write:
+ * @self: A #FuBleDevice
+ * @uuid: The UUID, e.g. `00cde35c-7062-11eb-9439-0242ac130002`
+ * @error: A #GError, or %NULL
+ *
+ * Writes to a UUID on the device.
+ *
+ * Returns: (transfer full): data, or %NULL for error
+ *
+ * Since: 1.5.7
+ **/
+gboolean
+fu_ble_device_write (FuBleDevice *self,
+			 const gchar *uuid,
+			 GByteArray *buf,
+			 GError **error)
+{
+	FuBleDeviceClass *klass = FU_BLE_DEVICE_GET_CLASS (self);
+	if (klass->write == NULL) {
+		g_set_error_literal (error,
+				     G_IO_ERROR,
+				     G_IO_ERROR_NOT_SUPPORTED,
+				     "not supported");
+		return FALSE;
+	}
+	return klass->write (self, uuid, buf, error);
 }
 
 static void
@@ -192,20 +202,6 @@ fu_ble_device_to_string (FuDevice *device, guint idt, GString *str)
 		fu_common_string_append_kv (str, idt, "Address", priv->address);
 	if (priv->adapter != NULL)
 		fu_common_string_append_kv (str, idt, "Adapter", priv->adapter);
-	if (priv->characteristics != NULL) {
-		GHashTableIter iter;
-		gpointer key, value;
-		g_hash_table_iter_init (&iter, priv->characteristics);
-		while (g_hash_table_iter_next (&iter, &key, &value)) {
-			fu_common_string_append_kv (str, idt + 1,
-						    (const gchar *) key,
-						    (const gchar *) value);
-		}
-	}
-
-	/* subclassed */
-	if (klass->to_string != NULL)
-		klass->to_string (self, idt, str);
 }
 
 static void
@@ -217,16 +213,12 @@ fu_ble_device_finalize (GObject *object)
 	g_free (priv->name);
 	g_free (priv->address);
 	g_free (priv->adapter);
-	g_hash_table_unref (priv->characteristics);
 	G_OBJECT_CLASS (fu_ble_device_parent_class)->finalize (object);
 }
 
 static void
 fu_ble_device_init (FuBleDevice *self)
 {
-	FuBleDevicePrivate *priv = GET_PRIVATE (self);
-	priv->characteristics = g_hash_table_new_full (g_str_hash, g_str_equal,
-						       g_free, g_free);
 }
 
 static void
@@ -241,10 +233,6 @@ fu_ble_device_class_init (FuBleDeviceClass *klass)
 
 /**
  * fu_ble_device_new:
- * @name: The name of the ble device.
- * @addr: The 48-bit address of the device.
- * @characteristics: A #GHashTable of utf8:utf8. The characteristics
- *   implemented by the device {uuid : object_path}.
  *
  * Creates a new #FuBleDevice.
  *

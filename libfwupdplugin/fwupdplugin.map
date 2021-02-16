@@ -764,11 +764,12 @@ LIBFWUPDPLUGIN_1.5.7 {
   global:
     fu_ble_device_get_adapter;
     fu_ble_device_get_address;
-    fu_ble_device_get_name;
     fu_ble_device_get_type;
     fu_ble_device_new;
+    fu_ble_device_read;
+    fu_ble_device_read_string;
     fu_ble_device_set_adapter;
     fu_ble_device_set_address;
-    fu_ble_device_set_name;
+    fu_ble_device_write;
   local: *;
 } LIBFWUPDPLUGIN_1.5.6;

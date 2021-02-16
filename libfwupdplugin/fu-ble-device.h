@@ -16,22 +16,30 @@ G_DECLARE_DERIVABLE_TYPE (FuBleDevice, fu_ble_device, FU, BLE_DEVICE, FuDevice)
 struct _FuBleDeviceClass
 {
 	FuDeviceClass	parent_class;
-	void		 (*to_string)			(FuBleDevice	*self,
-							 guint		 indent,
-							 GString	*str);
+	GByteArray	*(*read)			(FuBleDevice	*self,
+							 const gchar	*uuid,
+							 GError		**error);
+	gboolean	 (*write)			(FuBleDevice	*self,
+							 const gchar	*uuid,
+							 GByteArray	*buf,
+							 GError		**error);
 	gpointer	__reserved[28];
 };
 
 FuBleDevice		*fu_ble_device_new		(void);
-const gchar		*fu_ble_device_get_name 	(FuBleDevice	*self);
-void			 fu_ble_device_set_name		(FuBleDevice	*self,
-							 const gchar	*name);
 const gchar		*fu_ble_device_get_address 	(FuBleDevice	*self);
 void			 fu_ble_device_set_address	(FuBleDevice	*self,
 							 const gchar	*name);
 const gchar		*fu_ble_device_get_adapter 	(FuBleDevice	*self);
 void			 fu_ble_device_set_adapter	(FuBleDevice	*self,
 							 const gchar	*name);
-void			 fu_ble_device_add_characteristic(FuBleDevice	*self,
+GByteArray		*fu_ble_device_read		(FuBleDevice	*self,
 							 const gchar	*uuid,
-							 const gchar	*path);
+							 GError		**error);
+gchar			*fu_ble_device_read_string	(FuBleDevice	*self,
+							 const gchar	*uuid,
+							 GError		**error);
+gboolean		 fu_ble_device_write		(FuBleDevice	*self,
+							 const gchar	*uuid,
+							 GByteArray	*buf,
+							 GError		**error);
