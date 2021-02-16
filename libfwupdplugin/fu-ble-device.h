@@ -29,10 +29,10 @@ struct _FuBleDeviceClass
 FuBleDevice		*fu_ble_device_new		(void);
 const gchar		*fu_ble_device_get_address 	(FuBleDevice	*self);
 void			 fu_ble_device_set_address	(FuBleDevice	*self,
-							 const gchar	*name);
+							 const gchar	*address);
 const gchar		*fu_ble_device_get_adapter 	(FuBleDevice	*self);
 void			 fu_ble_device_set_adapter	(FuBleDevice	*self,
-							 const gchar	*name);
+							 const gchar	*adapter);
 GByteArray		*fu_ble_device_read		(FuBleDevice	*self,
 							 const gchar	*uuid,
 							 GError		**error);

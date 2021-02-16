@@ -22,7 +22,6 @@
  */
 
 typedef struct {
-	gchar			*name;
 	gchar			*address;
 	gchar			*adapter;
 } FuBleDevicePrivate;
@@ -195,8 +194,6 @@ fu_ble_device_to_string (FuDevice *device, guint idt, GString *str)
 	FuBleDevice *self = FU_BLE_DEVICE (device);
 	FuBleDevicePrivate *priv = GET_PRIVATE (self);
 
-	if (priv->name != NULL)
-		fu_common_string_append_kv (str, idt, "Name", priv->name);
 	if (priv->address != NULL)
 		fu_common_string_append_kv (str, idt, "Address", priv->address);
 	if (priv->adapter != NULL)
@@ -209,7 +206,6 @@ fu_ble_device_finalize (GObject *object)
 	FuBleDevice *self = FU_BLE_DEVICE (object);
 	FuBleDevicePrivate *priv = GET_PRIVATE (self);
 
-	g_free (priv->name);
 	g_free (priv->address);
 	g_free (priv->adapter);
 	G_OBJECT_CLASS (fu_ble_device_parent_class)->finalize (object);
