@@ -1093,10 +1093,6 @@ fu_util_device_flag_to_string (guint64 device_flag)
 		/* TRANSLATORS: save the old firmware to disk before installing the new one */
 		return _("Device will backup firmware before installing");
 	}
-	if (device_flag == FWUPD_DEVICE_FLAG_CONNECTED) {
-		/* TRANSLATORS: devices may be present but unconnected */
-		return _("Connected");
-	}
 	if (device_flag == FWUPD_DEVICE_FLAG_SKIPS_RESTART) {
 		/* skip */
 		return NULL;

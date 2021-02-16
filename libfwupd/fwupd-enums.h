@@ -175,7 +175,6 @@ typedef enum {
 #define FWUPD_DEVICE_FLAG_HAS_MULTIPLE_BRANCHES	(1llu << 39)	/* Since: 1.5.0 */
 #define FWUPD_DEVICE_FLAG_BACKUP_BEFORE_INSTALL	(1llu << 40)	/* Since: 1.5.0 */
 #define FWUPD_DEVICE_FLAG_MD_SET_ICON		(1llu << 41)	/* Since: 1.5.2; Deprecated: 1.5.5 */
-#define FWUPD_DEVICE_FLAG_CONNECTED		(1llu << 42)	/* Since: 1.5.7 */
 #define FWUPD_DEVICE_FLAG_UNKNOWN		G_MAXUINT64	/* Since: 0.7.3 */
 typedef guint64 FwupdDeviceFlags;
 
