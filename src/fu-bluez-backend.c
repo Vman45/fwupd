@@ -13,80 +13,151 @@
 
 struct _FuBluezBackend {
 	FuBackend		 parent_instance;
-	GDBusConnection		*connection;
-	GHashTable		*devices;	/* platform_id : * FuDevice */
+	GDBusObjectManager	*object_manager;
+	GHashTable		*devices;	/* object_path : * FuDevice */
 };
 
 G_DEFINE_TYPE (FuBluezBackend, fu_bluez_backend, FU_TYPE_BACKEND)
 
-/*
- * Returns a new FuBleDevice populated with the properties passed
- * in the properties variant (@a{sv}).
- *
- * TODO: Search device characteristics and populate the hash table.
- */
-static FuBluezDevice *
-fu_bluez_load_device_properties (GVariant *properties)
+static void
+fu_bluez_backend_object_properties_changed (FuBluezBackend *self, GDBusProxy *proxy)
 {
-	const gchar *prop_name;
-	GVariantIter it;
-	g_autoptr(FuBluezDevice) dev = fu_bluez_device_new ();
-	g_autoptr(GVariant) prop_val = NULL;
+	const gchar *path = g_dbus_proxy_get_object_path (proxy);
+	gboolean suitable;
+	FuDevice *device_tmp;
+	g_autoptr(FuBluezDevice) dev = NULL;
+	g_autoptr(GVariant) val_adapter = NULL;
+	g_autoptr(GVariant) val_address = NULL;
+	g_autoptr(GVariant) val_connected = NULL;
+	g_autoptr(GVariant) val_icon = NULL;
+	g_autoptr(GVariant) val_modalias = NULL;
+	g_autoptr(GVariant) val_name = NULL;
+	g_autoptr(GVariant) val_paired = NULL;
 
-	g_variant_iter_init (&it, properties);
-	while (g_variant_iter_next (&it, "{&sv}", &prop_name, &prop_val)) {
-		if (g_getenv ("FU_BLUEZ_BACKEND_DEBUG") != NULL) {
-			g_autofree gchar *str = g_variant_print (prop_val, TRUE);
-			g_debug ("%s: %s", prop_name, str);
+	/* device is suitable */
+	val_connected = g_dbus_proxy_get_cached_property (proxy, "Connected");
+	if (val_connected == NULL)
+		return;
+	val_paired = g_dbus_proxy_get_cached_property (proxy, "Paired");
+	if (val_paired == NULL)
+		return;
+	suitable = g_variant_get_boolean (val_connected) &&
+			g_variant_get_boolean (val_paired);
+
+	/* is this an existing device we've previously added */
+	device_tmp = g_hash_table_lookup (self->devices, path);
+	if (device_tmp != NULL) {
+		if (suitable) {
+			g_debug ("ignoring suitable changed Bluez device: %s", path);
+			return;
 		}
-		if (g_strcmp0 (prop_name, "Address") == 0) {
-			fu_ble_device_set_address (FU_BLE_DEVICE (dev),
-						   g_variant_get_string (prop_val, NULL));
-			continue;
-		}
-		if (g_strcmp0 (prop_name, "Adapter") == 0) {
-			fu_ble_device_set_adapter (FU_BLE_DEVICE (dev),
-						   g_variant_get_string (prop_val, NULL));
-			continue;
-		}
-		if (g_strcmp0 (prop_name, "Name") == 0) {
-			fu_device_set_name (FU_DEVICE (dev),
-					    g_variant_get_string (prop_val, NULL));
-			continue;
-		}
-		if (g_strcmp0 (prop_name, "Icon") == 0) {
-			fu_device_add_icon (FU_DEVICE (dev),
-					    g_variant_get_string (prop_val, NULL));
-			continue;
-		}
-		if (g_strcmp0 (prop_name, "Modalias") == 0) {
-			fu_bluez_device_set_modalias (dev, g_variant_get_string (prop_val, NULL));
-			continue;
-		}
-		if (g_strcmp0 (prop_name, "Connected") == 0) {
-			if (g_variant_get_boolean (prop_val))
-				fu_device_add_flag (FU_DEVICE (dev), FWUPD_DEVICE_FLAG_CONNECTED);
-			continue;
-		}
+		g_debug ("removing unsuitable Bluez device: %s", path);
+		fu_backend_device_removed (FU_BACKEND (self), device_tmp);
+		g_hash_table_remove (self->devices, path);
+		return;
 	}
-	return g_steal_pointer (&dev);
+
+	/* not paired and connected */
+	if (!suitable)
+		return;
+
+	/* create device */
+	val_address = g_dbus_proxy_get_cached_property (proxy, "Address");
+	if (val_address == NULL)
+		return;
+	dev = fu_bluez_device_new ();
+	fu_ble_device_set_address (FU_BLE_DEVICE (dev),
+				   g_variant_get_string (val_address, NULL));
+	val_adapter = g_dbus_proxy_get_cached_property (proxy, "Adapter");
+	if (val_adapter != NULL) {
+		fu_ble_device_set_adapter (FU_BLE_DEVICE (dev),
+					   g_variant_get_string (val_adapter, NULL));
+	}
+	val_name = g_dbus_proxy_get_cached_property (proxy, "Name");
+	if (val_name != NULL) {
+		fu_device_set_name (FU_DEVICE (dev),
+				    g_variant_get_string (val_name, NULL));
+	}
+	val_icon = g_dbus_proxy_get_cached_property (proxy, "Icon");
+	if (val_icon != NULL) {
+		fu_device_add_icon (FU_DEVICE (dev),
+				    g_variant_get_string (val_name, NULL));
+	}
+	val_modalias = g_dbus_proxy_get_cached_property (proxy, "Modalias");
+	if (val_modalias != NULL) {
+		fu_bluez_device_set_modalias (dev, g_variant_get_string (val_modalias, NULL));
+	}
+	g_debug ("adding suitable Bluez device: %s", path);
+	g_hash_table_insert (self->devices, g_strdup (path), g_object_ref (dev));
+	fu_backend_device_added (FU_BACKEND (self), FU_DEVICE (dev));
 }
 
+static void
+fu_bluez_backend_object_properties_changed_cb (GDBusProxy *proxy,
+					       GVariant *changed_properties,
+					       GStrv invalidated_properties,
+					       FuBluezBackend *self)
+{
+	fu_bluez_backend_object_properties_changed (self, proxy);
+}
+
+static void
+fu_bluez_backend_object_added (FuBluezBackend *self, GDBusObject *object)
+{
+	g_autoptr(GDBusInterface) iface = NULL;
+	g_auto(GStrv) names = NULL;
+
+	iface = g_dbus_object_get_interface (object, "org.bluez.Device1");
+	if (iface == NULL)
+		return;
+	g_signal_connect (iface, "g-properties-changed",
+			  G_CALLBACK (fu_bluez_backend_object_properties_changed_cb),
+			  self);
+	fu_bluez_backend_object_properties_changed (self, G_DBUS_PROXY (iface));
+}
+
+static void
+fu_bluez_backend_object_added_cb (GDBusObjectManager *manager,
+				  GDBusObject *object,
+				  FuBluezBackend *self)
+{
+	fu_bluez_backend_object_added (self, object);
+}
+
+static void
+fu_bluez_backend_object_removed_cb (GDBusObjectManager *manager,
+				    GDBusObject *object,
+				    FuBluezBackend *self)
+{
+	const gchar *path = g_dbus_object_get_object_path (object);
+	FuDevice *device_tmp;
+
+	device_tmp = g_hash_table_lookup (self->devices, path);
+	if (device_tmp == NULL)
+		return;
+	g_debug ("removing Bluez device: %s", path);
+	fu_backend_device_removed (FU_BACKEND (self), device_tmp);
+	g_hash_table_remove (self->devices, path);
+}
 
 static gboolean
 fu_bluez_backend_setup (FuBackend *backend, GError **error)
 {
 	FuBluezBackend *self = FU_BLUEZ_BACKEND (backend);
 
-	self->connection = g_bus_get_sync (G_BUS_TYPE_SYSTEM, NULL, NULL);
-	if (self->connection == NULL) {
-		g_prefix_error (error, "Failed to connect to bluez dbus: ");
+	self->object_manager = g_dbus_object_manager_client_new_for_bus_sync (
+					G_BUS_TYPE_SYSTEM,
+					G_DBUS_OBJECT_MANAGER_CLIENT_FLAGS_NONE,
+					"org.bluez",
+					"/",
+					NULL, NULL, NULL,
+					NULL, error);
+	if (self->object_manager == NULL)
 		return FALSE;
-	}
-	/*
-	 * TODO: Subscribe DBus signals.
-	 */
-
+	g_signal_connect (self->object_manager, "object-added",
+			  G_CALLBACK (fu_bluez_backend_object_added_cb), self);
+	g_signal_connect (self->object_manager, "object-removed",
+			  G_CALLBACK (fu_bluez_backend_object_removed_cb), self);
 	return TRUE;
 }
 
@@ -94,68 +165,16 @@ static gboolean
 fu_bluez_backend_coldplug (FuBackend *backend, GError **error)
 {
 	FuBluezBackend *self = FU_BLUEZ_BACKEND (backend);
-	g_autoptr(GDBusProxy) proxy = NULL;
-	g_autoptr(GVariant) value = NULL;
-	g_autoptr(GVariant) obj_info = NULL;
-	const gchar *obj_path;
-	GVariantIter i;
+	g_autolist(GDBusObject) objects = NULL;
 
-	/*
-	 * Bluez publishes all the object info through the
-	 * "GetManagedObjects" method
-	 * ("org.freedesktop.DBus.ObjectManager" interface).
-	 *
-	 * Look for objects that implement "org.bluez.Device1".
-	 */
-
-	proxy = g_dbus_proxy_new_for_bus_sync (G_BUS_TYPE_SYSTEM,
-					       G_DBUS_PROXY_FLAGS_NONE,
-					       NULL,
-					       "org.bluez",
-					       "/",
-					       "org.freedesktop.DBus.ObjectManager",
-					       NULL,
-					       error);
-	if (proxy == NULL) {
-		g_prefix_error (error, "Failed to connect to bluez dbus: ");
-		return FALSE;
+	/* failed to set up */
+	if (self->object_manager == NULL)
+		return TRUE;
+	objects = g_dbus_object_manager_get_objects (self->object_manager);
+	for (GList *l = objects; l != NULL; l = l->next) {
+		GDBusObject *object = G_DBUS_OBJECT (l->data);
+		fu_bluez_backend_object_added (self, object);
 	}
-	value = g_dbus_proxy_call_sync (proxy,
-					"GetManagedObjects",
-					NULL,
-					G_DBUS_CALL_FLAGS_NONE,
-					-1,
-					NULL,
-					error);
-	if (value == NULL) {
-		g_prefix_error (error, "Failed to call GetManagedObjects: ");
-		return FALSE;
-	}
-
-	value = g_variant_get_child_value (value, 0);
-	g_variant_iter_init (&i, value);
-	while (g_variant_iter_next (&i, "{&o@a{sa{sv}}}", &obj_path, &obj_info)) {
-		const gchar *if_name;
-		g_autoptr(GVariant) properties = NULL;
-		GVariantIter j;
-
-		g_variant_iter_init (&j, obj_info);
-		while (g_variant_iter_next (&j, "{&s@a{sv}}", &if_name, &properties)) {
-			g_autoptr(FuBluezDevice) dev = NULL;
-			if (g_strcmp0 (if_name, "org.bluez.Device1") != 0)
-				continue;
-			dev = fu_bluez_load_device_properties (properties);
-			if (dev == NULL)
-				continue;
-			if (g_getenv ("FU_BLUEZ_BACKEND_DEBUG") != NULL)
-				g_debug ("%s", fu_device_to_string (FU_DEVICE (dev)));
-			g_hash_table_insert (self->devices,
-					     g_strdup (fu_ble_device_get_address (FU_BLE_DEVICE (dev))),
-					     g_object_ref (dev));
-			fu_backend_device_added (FU_BACKEND (self), FU_DEVICE (dev));
-		}
-	}
-
 	return TRUE;
 }
 
@@ -163,9 +182,8 @@ static void
 fu_bluez_backend_finalize (GObject *object)
 {
 	FuBluezBackend *self = FU_BLUEZ_BACKEND (object);
-
-	if (self->connection != NULL)
-		g_object_unref (self->connection);
+	if (self->object_manager != NULL)
+		g_object_unref (self->object_manager);
 	g_hash_table_unref (self->devices);
 	G_OBJECT_CLASS (fu_bluez_backend_parent_class)->finalize (object);
 }
